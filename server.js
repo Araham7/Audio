@@ -1,5 +1,4 @@
 const WebSocket = require('ws');
-
 const port = process.env.PORT || 8080;
 const wss = new WebSocket.Server({ port });
 
@@ -33,6 +32,7 @@ wss.on('connection', (ws) => {
     }
   });
 
+  // Assign role: first client is transmitter, others are receivers
   if (!transmitter) {
     transmitter = ws;
     console.log('Client assigned as transmitter');
@@ -43,7 +43,7 @@ wss.on('connection', (ws) => {
 });
 
 wss.on('listening', () => {
-  console.log(`WebSocket server listening on port ${port}`);
+  console.log('WebSocket server listening on port 8080');
 });
 
 wss.on('error', (err) => {
