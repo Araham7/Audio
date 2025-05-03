@@ -1,51 +1,59 @@
-const WebSocket = require('ws');
+import { createServer } from 'http';
+import express from 'express';
+import { Server } from 'socket.io';
 
-const port = process.env.PORT || 8080;
-const wss = new WebSocket.Server({ port });
+const app = express();
+const server = createServer(app);
+const io = new Server(server, {
+    cors: {
+        origin: "*", // Update in production
+        methods: ["GET", "POST"],
+        credentials: true,
+    },
+});
 
 let transmitter = null;
 let receivers = new Set();
 
-wss.on('connection', (ws) => {
-  console.log('New client connected');
+io.on('connection', (socket) => {
+    console.log('Client connected:', socket.id);
 
-  ws.on('message', (data, isBinary) => {
-    if (isBinary && transmitter === ws) {
-      console.log(`Received ${data.length} bytes from transmitter`);
-      let forwarded = 0;
-      receivers.forEach((receiver) => {
-        if (receiver.readyState === WebSocket.OPEN) {
-          receiver.send(data, { binary: true });
-          forwarded++;
-        }
-      });
-      console.log(`Forwarded to ${forwarded} receivers`);
-    }
-  });
-
-  ws.on('close', () => {
-    if (ws === transmitter) {
-      console.log('Transmitter disconnected');
-      transmitter = null;
+    if (!transmitter) {
+        transmitter = socket;
+        console.log(`Client ${socket.id} assigned as transmitter`);
     } else {
-      console.log('Receiver disconnected');
-      receivers.delete(ws);
+        receivers.add(socket);
+        console.log(`Client ${socket.id} assigned as receiver`);
     }
-  });
 
-  if (!transmitter) {
-    transmitter = ws;
-    console.log('Client assigned as transmitter');
-  } else {
-    receivers.add(ws);
-    console.log('Client assigned as receiver');
-  }
+    // Listening for data sent by the transmitter
+    socket.on('sendData', (data) => {
+        if (socket === transmitter) {
+            console.log(`Received data from transmitter: ${data.length} bytes`);
+            let forwarded = 0;
+            receivers.forEach((receiver) => {
+                if (receiver.connected) {
+                    receiver.emit('receivedData', data);
+                    forwarded++;
+                }
+            });
+            console.log(`Forwarded to ${forwarded} receivers`);
+        }
+    });
+
+    socket.on('disconnect', () => {
+        if (socket === transmitter) {
+            console.log('Transmitter disconnected');
+            transmitter = null;
+            // Optionally promote a receiver to transmitter here
+        } else {
+            console.log('Receiver disconnected:', socket.id);
+            receivers.delete(socket);
+        }
+    });
 });
 
-wss.on('listening', () => {
-  console.log(`WebSocket server listening on port ${port}`);
-});
-
-wss.on('error', (err) => {
-  console.error('WebSocket server error:', err);
+const PORT = 3000;
+server.listen(PORT, () => {
+    console.log(`Socket.IO server running on http://localhost:${PORT}`);
 });
